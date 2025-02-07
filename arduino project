@@ -1,0 +1,191 @@
+#include <ArduinoIoTCloud.h>
+#include <Arduino_ConnectionHandler.h>
+#include <WiFi.h>
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
+
+// Credenciais Wi-Fi
+const char WIFI_SSID[] = "Pootis penser here";       // Nome do Wifi
+const char WIFI_PASSWORD[] = "#*Left:4_Dead:2*#";    // Senha do Wifi
+
+// Variáveis sincronizadas com a Arduino IoT Cloud
+float temperature;
+float humidity;
+float pressure;
+float windSpeed;
+String beaufortCategory;
+
+// Configuração dos pinos do sensor ultrassônico 1
+const int TriggerPin1 = 9;
+const int EchoPin1 = 10;
+
+// Configuração dos pinos do sensor ultrassônico 2
+const int TriggerPin2 = 11;
+const int EchoPin2 = 12;
+
+// Variáveis para armazenar o tempo medido pelos sensores ultrassônicos
+long Duration1 = 0;
+long Duration2 = 0;
+
+// Distância entre os sensores (em metros)
+const float DistanceBetweenSensors = 0.3; // 30 cm
+
+// Endereço I2C para o sensor BME280
+#define BME280_ADDRESS 0x76
+
+// Criação de um objeto para o sensor BME280
+Adafruit_BME280 bme;
+
+// Função para calcular a distância (em cm) a partir do tempo medido
+long Distance(long time) {
+  return ((time * 0.034) / 2); // Conversão para centímetros
+}
+
+// Função para calcular a velocidade do som usando a fórmula termodinâmica
+float calculateThermodynamicSoundSpeed(float temperature) {
+  const float gamma = 1.4; // Razão dos calores específicos para o ar seco
+  const float R = 8.314;   // Constante universal dos gases [J/(mol·K)]
+  const float M = 0.0289644; // Massa molar do ar seco [kg/mol]
+
+  // Converter temperatura de Celsius para Kelvin
+  float temperatureK = temperature + 273.15;
+
+  // Aplicar a fórmula termodinâmica
+  return sqrt((gamma * R * temperatureK) / M);
+}
+
+// Função para calcular a velocidade do vento
+float calculateWindSpeed(float distance, long t1, long t2) {
+  float t1_s = t1 * 1e-6; // Converter para segundos
+  float t2_s = t2 * 1e-6; // Converter para segundos
+  return (distance / 2.0) * (1.0 / t1_s - 1.0 / t2_s); // Fórmula da velocidade do vento
+}
+
+// Função para classificar a velocidade do vento baseado na escala de Beaufort
+String beaufortScale(float windSpeed) {
+  if (windSpeed < 0.3) return "Calmo";
+  if (windSpeed < 1.6) return "Brisa Muito Leve";
+  if (windSpeed < 3.4) return "Brisa Leve";
+  if (windSpeed < 5.5) return "Brisa Fraca";
+  if (windSpeed < 7.9) return "Brisa Moderada";
+  if (windSpeed < 10.7) return "Brisa Forte";
+  if (windSpeed < 13.8) return "Vento Fresco";
+  if (windSpeed < 17.1) return "Vento Forte";
+  if (windSpeed < 20.7) return "Ventania Moderada";
+  if (windSpeed < 24.4) return "Ventania Forte";
+  if (windSpeed < 28.4) return "Tempestade";
+  if (windSpeed < 32.6) return "Tempestade Violenta";
+  return "Furacão";
+}
+
+// Inicializar as variáveis na IoT Cloud
+void initProperties() {
+  ArduinoCloud.addProperty(temperature, READ, 1 * SECONDS, NULL);
+  ArduinoCloud.addProperty(humidity, READ, 1 * SECONDS, NULL);
+  ArduinoCloud.addProperty(pressure, READ, 1 * SECONDS, NULL);
+  ArduinoCloud.addProperty(windSpeed, READ, 1 * SECONDS, NULL);
+  ArduinoCloud.addProperty(beaufortCategory, READ, 1 * SECONDS, NULL);
+}
+
+// Configuração do gerenciador de conexão
+WiFiConnectionHandler ArduinoIoTPreferredConnection(WIFI_SSID, WIFI_PASSWORD);
+
+void setup() {
+  // Inicializar comunicação serial
+  Serial.begin(9600);
+  while (!Serial);
+
+  // Configuração dos pinos dos sensores ultrassônicos
+  pinMode(TriggerPin1, OUTPUT);
+  pinMode(EchoPin1, INPUT);
+  pinMode(TriggerPin2, OUTPUT);
+  pinMode(EchoPin2, INPUT);
+
+  // Inicializar o sensor BME280
+  if (!bme.begin(BME280_ADDRESS)) {
+    Serial.println("Falha ao inicializar o sensor BME280. Verifique as ligações.");
+    while (1); // Loop infinito em caso de erro crítico
+  }
+
+  // Inicializar a IoT Cloud
+  initProperties();
+  ArduinoCloud.begin(ArduinoIoTPreferredConnection);
+
+  Serial.println("Configuração concluída!");
+}
+
+void loop() {
+  // Atualizar a IoT Cloud
+  ArduinoCloud.update();
+
+  // Leituras dos sensores ultrassônicos
+  digitalWrite(TriggerPin1, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TriggerPin1, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TriggerPin1, LOW);
+  Duration1 = pulseIn(EchoPin1, HIGH);
+
+  digitalWrite(TriggerPin2, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TriggerPin2, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TriggerPin2, LOW);
+  Duration2 = pulseIn(EchoPin2, HIGH);
+
+  // Calcular a distância medida pelos sensores
+  long Distance1_cm = Distance(Duration1);
+  long Distance2_cm = Distance(Duration2);
+
+  // Leituras do sensor BME280
+  temperature = bme.readTemperature();
+  humidity = bme.readHumidity();
+  pressure = bme.readPressure() / 100.0F;
+
+  // Calcular a velocidade do som e do vento
+  float soundSpeedThermodynamic = calculateThermodynamicSoundSpeed(temperature);
+  windSpeed = calculateWindSpeed(DistanceBetweenSensors, Duration1, Duration2);
+  beaufortCategory = beaufortScale(windSpeed);
+
+  // Exibir as distâncias medidas pelos sensores ultrassônicos
+  Serial.print("Distância do Sensor 1 = ");
+  Serial.print(Distance1_cm);
+  Serial.println(" cm");
+
+  Serial.print("Distância do Sensor 2 = ");
+  Serial.print(Distance2_cm);
+  Serial.println(" cm");
+
+  // Calcular e exibir a diferença de tempo entre os sensores
+  long TimeDifference = Duration1 - Duration2;
+  Serial.print("Diferença de tempo = ");
+  Serial.print(TimeDifference);
+  Serial.println(" microsegundos");
+
+  // Exibir as leituras do sensor BME280
+  Serial.print("Temp: ");
+  Serial.print(temperature);
+  Serial.print(" °C | Hum: ");
+  Serial.print(humidity);
+  Serial.print(" % | Press: ");
+  Serial.print(pressure);
+  Serial.println(" hPa");
+
+  // Exibir a velocidade do som
+  Serial.print("Velocidade do Som (Termodinâmica): ");
+  Serial.print(soundSpeedThermodynamic);
+  Serial.println(" m/s");
+
+  // Exibir a velocidade do vento
+  Serial.print("Velocidade do Vento: ");
+  Serial.print(windSpeed);
+  Serial.print(" m/s (");
+  Serial.print(beaufortCategory);
+  Serial.println(")");
+
+  Serial.println("---------------------------");
+
+  delay(2000);
+}
+
