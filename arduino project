@@ -6,8 +6,8 @@
 #include <Adafruit_BME280.h>
 
 // Credenciais Wi-Fi
-const char WIFI_SSID[] = "Pootis penser here";       // Nome do Wifi
-const char WIFI_PASSWORD[] = "#*Left:4_Dead:2*#";    // Senha do Wifi
+const char WIFI_SSID[] = "NOME DA REDE";       // Nome do Wifi
+const char WIFI_PASSWORD[] = "SENHA DO WIFI";    // Senha do Wifi
 
 // Variáveis sincronizadas com a Arduino IoT Cloud
 float temperature;
