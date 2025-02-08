@@ -6,8 +6,8 @@
 #include <Adafruit_BME280.h>
 
 // Credenciais Wi-Fi
-const char WIFI_SSID[] = "NOME DA REDE";       // Nome do Wifi
-const char WIFI_PASSWORD[] = "SENHA DO WIFI";    // Senha do Wifi
+const char WIFI_SSID[] = "teste";       // Nome do wifi
+const char WIFI_PASSWORD[] = "teste"; // Senha do wifi
 
 // Variáveis sincronizadas com a Arduino IoT Cloud
 float temperature;
@@ -64,18 +64,19 @@ float calculateWindSpeed(float distance, long t1, long t2) {
 
 // Função para classificar a velocidade do vento baseado na escala de Beaufort
 String beaufortScale(float windSpeed) {
-  if (windSpeed < 0.3) return "Calmo";
-  if (windSpeed < 1.6) return "Brisa Muito Leve";
-  if (windSpeed < 3.4) return "Brisa Leve";
-  if (windSpeed < 5.5) return "Brisa Fraca";
-  if (windSpeed < 7.9) return "Brisa Moderada";
-  if (windSpeed < 10.7) return "Brisa Forte";
-  if (windSpeed < 13.8) return "Vento Fresco";
-  if (windSpeed < 17.1) return "Vento Forte";
-  if (windSpeed < 20.7) return "Ventania Moderada";
-  if (windSpeed < 24.4) return "Ventania Forte";
-  if (windSpeed < 28.4) return "Tempestade";
-  if (windSpeed < 32.6) return "Tempestade Violenta";
+  // Condição para tratar os valores negativos e positivos como iguais
+  if (abs(windSpeed) < 0.3) return "Calmo";
+  if (abs(windSpeed) < 1.6) return "Brisa Muito Leve";
+  if (abs(windSpeed) < 3.4) return "Brisa Leve";
+  if (abs(windSpeed) < 5.5) return "Brisa Fraca";
+  if (abs(windSpeed) < 7.9) return "Brisa Moderada";
+  if (abs(windSpeed) < 10.7) return "Brisa Forte";
+  if (abs(windSpeed) < 13.8) return "Vento Fresco";
+  if (abs(windSpeed) < 17.1) return "Vento Forte";
+  if (abs(windSpeed) < 20.7) return "Ventania Moderada";
+  if (abs(windSpeed) < 24.4) return "Ventania Forte";
+  if (abs(windSpeed) < 28.4) return "Tempestade";
+  if (abs(windSpeed) < 32.6) return "Tempestade Violenta";
   return "Furacão";
 }
 
@@ -146,7 +147,19 @@ void loop() {
   // Calcular a velocidade do som e do vento
   float soundSpeedThermodynamic = calculateThermodynamicSoundSpeed(temperature);
   windSpeed = calculateWindSpeed(DistanceBetweenSensors, Duration1, Duration2);
+
+  // Ajuste para ignorar oscilações dos sensores
+  if (windSpeed > -4.9 && windSpeed < 3) {
+      windSpeed = 0; // Oscilação natural, trata como 0
+  } else if (windSpeed <= -4.9) {
+      windSpeed += 4.9; // Compensa o limite inferior
+  } else if (windSpeed >= 3) {
+      windSpeed -= 3; // Compensa o limite superior
+  }
+
+  // Classificar a velocidade do vento na escala de Beaufort
   beaufortCategory = beaufortScale(windSpeed);
+
 
   // Exibir as distâncias medidas pelos sensores ultrassônicos
   Serial.print("Distância do Sensor 1 = ");
@@ -186,6 +199,6 @@ void loop() {
 
   Serial.println("---------------------------");
 
-  delay(2000);
+  delay(3000);
 }
 
